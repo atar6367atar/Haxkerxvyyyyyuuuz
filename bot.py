@@ -12,13 +12,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # ============ RENDER HEALTH CHECK SERVER ============
-# ASCII ONLY - EMOJİ YOK!
 class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b'Python Runner Bot is ONLINE!')  # EMOJİ YOK!
+        self.wfile.write(b'Python Runner Bot is ONLINE!')
     
     def log_message(self, format, *args):
         pass
@@ -36,6 +35,7 @@ threading.Thread(target=start_health_server, daemon=True).start()
 # ============ TELEGRAM IMPORT ============
 if sys.version_info >= (3, 13):
     import collections.abc
+    import collections
     if not hasattr(collections, 'Mapping'):
         collections.Mapping = collections.abc.Mapping
     if not hasattr(collections, 'MutableMapping'):
@@ -216,8 +216,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(f"Hata: {str(e)[:200]}")
     finally:
         if temp_path and os.path.exists(temp_path):
-            try: os.remove(temp_path)
-            except: pass
+            try: 
+                os.remove(temp_path)
+            except: 
+                pass
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -247,23 +249,7 @@ def main():
         print(f"Hata: {e}")
 
 if __name__ == "__main__":
-    main()atus_msg = await update.message.reply_text("⚡ İşleniyor...")
-    temp_path = None
-    
-    try:
-        file = await context.bot.get_file(doc.file_id)
-        temp_path = f"/tmp/{user_id}_{doc.file_name}"
-        await file.download_to_drive(temp_path)
-        await status_msg.edit_text("🔍 Analiz ediliyor...")
-        output = await runner.run_ultra_fast(temp_path)
-        result = f"📁 *{doc.file_name}*\n\n📤 *Çıktı:*\n```\n{output}\n```"
-        if len(result) > 4096:
-            result = f"📁 *{doc.file_name}*\n\n📤 *Çıktı:*\n```\n{output[:3500]}\n```"
-        await status_msg.edit_text(result, parse_mode='Markdown')
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Hata: {str(e)[:200]}")
-    finally:
-        if temp_path and os.path.exists(temp_path):
+    main()ath):
             try: os.remove(temp_path)
             except: pass
 
