@@ -5,6 +5,7 @@ import subprocess
 import threading
 import http.server
 import socketserver
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -31,26 +32,60 @@ threading.Thread(target=start_health_server, daemon=True).start()
 
 # ================= IMPORT TESPIT =================
 
+STD_LIBS = {
+    "sys","os","re","json","time","datetime","math","random","collections",
+    "itertools","functools","pathlib","typing","uuid","hashlib","base64",
+    "copy","enum","socket","threading","asyncio","subprocess","http",
+    "socketserver"
+}
+
 def extract_imports(code):
     imports = set()
-    for line in code.split("\n"):
-        line = line.strip()
 
-        if line.startswith("import "):
-            parts = line.replace("import ", "").split(",")
-            for part in parts:
-                pkg = part.strip().split(" ")[0].split(".")[0]
-                if pkg:
-                    imports.add(pkg)
+    pattern1 = re.findall(r'^\s*import\s+([a-zA-Z0-9_., ]+)', code, re.MULTILINE)
+    pattern2 = re.findall(r'^\s*from\s+([a-zA-Z0-9_\.]+)\s+import', code, re.MULTILINE)
 
-        elif line.startswith("from "):
-            parts = line.split()
-            if len(parts) > 1:
-                pkg = parts[1].split(".")[0]
-                if pkg:
-                    imports.add(pkg)
+    for match in pattern1:
+        parts = match.split(",")
+        for p in parts:
+            pkg = p.strip().split(" as ")[0].split(".")[0]
+            if pkg and pkg not in STD_LIBS:
+                imports.add(pkg)
+
+    for match in pattern2:
+        pkg = match.split(".")[0]
+        if pkg and pkg not in STD_LIBS:
+            imports.add(pkg)
 
     return list(imports)
+
+# ================= PIP INSTALLER =================
+
+def install_package(pkg):
+    try:
+        __import__(pkg)
+        return False
+    except:
+        pass
+
+    possible_names = [
+        pkg,
+        pkg.replace("_", "-"),
+        pkg.replace("-", "_")
+    ]
+
+    for name in possible_names:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            return True
+        except:
+            continue
+
+    return False
 
 # ================= RUNNER =================
 
@@ -61,18 +96,13 @@ async def run_code(file_path):
 
         packages = extract_imports(code)
 
-        # Paketleri yükle (timeout yok)
-        for pkg in packages:
-            try:
-                __import__(pkg)
-            except:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", pkg],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
+        installed = []
 
-        # Çalıştır (timeout YOK)
+        for pkg in packages:
+            result = install_package(pkg)
+            if result:
+                installed.append(pkg)
+
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             file_path,
@@ -82,12 +112,18 @@ async def run_code(file_path):
 
         stdout, stderr = await process.communicate()
 
-        output = stdout.decode(errors="ignore") if stdout else "Çıktı yok"
+        output = ""
+
+        if installed:
+            output += "Yüklenen Paketler:\n" + ", ".join(installed) + "\n\n"
+
+        if stdout:
+            output += stdout.decode(errors="ignore")
 
         if stderr:
             output += "\n\nHata:\n" + stderr.decode(errors="ignore")
 
-        return output[:4000]
+        return output[:4000] if output else "Çıktı yok"
 
     except Exception as e:
         return f"Hata: {str(e)}"
@@ -96,9 +132,9 @@ async def run_code(file_path):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Python Runner Bot\n\n"
-        ".py dosyası gönder.\n"
-        "Timeout yok (Render limiti geçerlidir)."
+        "Ultra Python Runner\n\n"
+        "Tüm importları otomatik kurar.\n"
+        "Timeout yok (Render limiti geçerli)."
     )
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -108,15 +144,14 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sadece .py dosyası gönder!")
         return
 
-    await update.message.reply_text("Dosya indiriliyor...")
+    await update.message.reply_text("İndiriliyor ve analiz ediliyor...")
 
     try:
         file = await context.bot.get_file(document.file_id)
-
         save_path = f"/tmp/{document.file_name}"
         await file.download_to_drive(save_path)
 
-        await update.message.reply_text("Paketler yükleniyor ve çalıştırılıyor...")
+        await update.message.reply_text("Paketler kuruluyor ve çalıştırılıyor...")
 
         output = await run_code(save_path)
 
