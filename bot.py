@@ -6,14 +6,38 @@ import shutil
 import asyncio
 import re
 import threading
+import http.server
+import socketserver
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-# ============ TELEGRAM IMPORT ============
-# Python 3.13+ uyumluluk düzeltmesi
+# ============ RENDER HEALTH CHECK SERVER ============
+# Bu port sayesinde Render "No open ports" hatası vermez!
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'🤖 Python Runner Bot is ONLINE!')
+    
+    def log_message(self, format, *args):
+        pass  # Logları kapat, sessiz çalış
+
+def start_health_server():
+    """Render'ın istediği portu açar"""
+    port = int(os.environ.get('PORT', 10000))
+    handler = HealthCheckHandler
+    httpd = socketserver.TCPServer(("0.0.0.0", port), handler)
+    print(f"✅ Health check server active on port {port}")
+    httpd.serve_forever()
+
+# Health server'ı arka planda başlat
+threading.Thread(target=start_health_server, daemon=True).start()
+# ====================================================
+
+# ============ TELEGRAM IMPORT (Python 3.13+ Fix) ============
 if sys.version_info >= (3, 13):
     import collections.abc
-    # Eski tarz Mapping/MutableMapping'i patch'le
     if not hasattr(collections, 'Mapping'):
         collections.Mapping = collections.abc.Mapping
     if not hasattr(collections, 'MutableMapping'):
@@ -36,7 +60,6 @@ class UltraFastPythonRunner:
     
     def _init_environment(self):
         """Süper hızlı başlangıç"""
-        # Pip'i hazır et
         subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True)
         
         # En çok kullanılan paketleri önyükle
@@ -61,14 +84,11 @@ class UltraFastPythonRunner:
                     self.package_cache.add(pkg)
                 except:
                     pass
-        
-        # Paralel önyükleme
         list(self.executor.map(preload_pkg, common))
     
     def extract_imports_instant(self, code):
         """Milisaniyede import tespiti"""
         imports = set()
-        
         for line in code.split('\n'):
             line = line.strip()
             if line.startswith('import '):
@@ -84,7 +104,6 @@ class UltraFastPythonRunner:
                     if pkg and not pkg.startswith('_'):
                         imports.add(pkg)
         
-        # Standart kütüphaneleri filtrele
         std_libs = {
             'sys', 'os', 're', 'json', 'time', 'datetime', 'math',
             'random', 'collections', 'itertools', 'functools', 'pathlib',
@@ -92,24 +111,22 @@ class UltraFastPythonRunner:
             'socket', 'threading', 'asyncio', 'concurrent', 'multiprocessing',
             'argparse', 'logging', 'warnings', 'traceback', 'inspect',
             'abc', 'array', 'atexit', 'binascii', 'bisect', 'builtins',
-            'bz2', 'calendar', 'cgi', 'cmath', 'cmd', 'codecs', 'collections.abc',
-            'compileall', 'contextlib', 'csv', 'ctypes', 'curses', 'datetime',
-            'dbm', 'decimal', 'difflib', 'dis', 'distutils', 'doctest',
-            'email', 'encodings', 'errno', 'faulthandler', 'fcntl',
+            'bz2', 'calendar', 'cgi', 'cmath', 'cmd', 'codecs', 'contextlib',
+            'csv', 'ctypes', 'curses', 'dbm', 'decimal', 'difflib', 'dis',
+            'distutils', 'doctest', 'email', 'encodings', 'errno', 'fcntl',
             'filecmp', 'fileinput', 'fnmatch', 'fractions', 'ftplib',
-            'functools', 'gc', 'getopt', 'getpass', 'gettext', 'glob',
-            'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html', 'http',
-            'imaplib', 'imghdr', 'importlib', 'inspect', 'io', 'ipaddress',
-            'itertools', 'json', 'keyword', 'linecache', 'locale', 'logging',
-            'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes',
-            'mmap', 'modulefinder', 'msilib', 'msvcrt', 'multiprocessing',
-            'netrc', 'nis', 'nntplib', 'ntpath', 'nturl2path', 'numbers',
-            'opcode', 'operator', 'optparse', 'os', 'ossaudiodev', 'parser',
-            'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil',
-            'platform', 'plistlib', 'poplib', 'posix', 'posixpath', 'pprint',
-            'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr',
-            'pydoc', 'queue', 'quopri', 'random', 're', 'readline',
-            'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched',
+            'gc', 'getopt', 'getpass', 'gettext', 'glob', 'grp', 'gzip',
+            'hashlib', 'heapq', 'hmac', 'html', 'http', 'imaplib', 'imghdr',
+            'importlib', 'io', 'ipaddress', 'itertools', 'json', 'keyword',
+            'linecache', 'locale', 'logging', 'lzma', 'mailbox', 'mailcap',
+            'marshal', 'math', 'mimetypes', 'mmap', 'modulefinder', 'msilib',
+            'msvcrt', 'multiprocessing', 'netrc', 'nis', 'nntplib', 'ntpath',
+            'nturl2path', 'numbers', 'opcode', 'operator', 'optparse', 'os',
+            'ossaudiodev', 'parser', 'pathlib', 'pdb', 'pickle', 'pickletools',
+            'pipes', 'pkgutil', 'platform', 'plistlib', 'poplib', 'posix',
+            'posixpath', 'pprint', 'profile', 'pstats', 'pty', 'pwd',
+            'py_compile', 'pyclbr', 'pydoc', 'queue', 'quopri', 'random', 're',
+            'readline', 'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched',
             'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil',
             'signal', 'site', 'smtpd', 'smtplib', 'sndhdr', 'socket',
             'socketserver', 'spwd', 'sqlite3', 'ssl', 'stat', 'statistics',
@@ -123,15 +140,11 @@ class UltraFastPythonRunner:
             'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc', 'zipapp',
             'zipfile', 'zipimport', 'zlib'
         }
-        
         return [imp for imp in imports if imp and imp not in std_libs]
     
     def install_packages_parallel(self, packages):
-        """Paralel paket yükleme"""
         if not packages:
             return []
-        
-        # Cache'ten hızlı kontrol
         to_install = []
         for pkg in packages:
             if pkg not in self.package_cache:
@@ -140,11 +153,8 @@ class UltraFastPythonRunner:
                     self.package_cache.add(pkg)
                 except:
                     to_install.append(pkg)
-        
         if not to_install:
             return []
-        
-        # TEK KOMUT - TEK SEFERDE hepsini yükle
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "install"] + to_install,
@@ -156,7 +166,6 @@ class UltraFastPythonRunner:
                 self.package_cache.update(to_install)
                 return to_install
         except:
-            # Başarısız olanları tek tek dene
             installed = []
             for pkg in to_install:
                 try:
@@ -170,81 +179,116 @@ class UltraFastPythonRunner:
                 except:
                     pass
             return installed
-        
         return []
     
     async def run_ultra_fast(self, file_path):
-        """Anında çalıştır - ZAMAN AŞIMI YOK"""
-        
         try:
-            # Dosyayı oku
             with open(file_path, 'r', encoding='utf-8') as f:
                 code = f.read()
-            
-            # Importları anında bul
             imports = self.extract_imports_instant(code)
-            
-            # Paketleri paralel yükle
             installed = []
             if imports:
                 installed = self.install_packages_parallel(imports)
             
-            # Çalıştır - SINIRSIZ SÜRE
             process = await asyncio.create_subprocess_exec(
                 sys.executable, file_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.path.dirname(file_path)
             )
-            
-            # Sonsuz bekle - timeout YOK!
             stdout, stderr = await process.communicate()
-            
-            output = stdout.decode('utf-8', errors='ignore')[:3500] if stdout else "✅ Çalıştı (çıktı yok)"
-            
+            output = stdout.decode('utf-8', errors='ignore')[:3500] if stdout else "✅ Çalıştı"
             if stderr:
                 error = stderr.decode('utf-8', errors='ignore')
                 if "Error" in error or "Exception" in error:
                     output = f"❌ Hata:\n{error[:2000]}"
                 else:
-                    output += f"\n\n⚠️ Uyarılar:\n{error[:1000]}"
-            
-            # Paket bilgisini ekle
+                    output += f"\n\n⚠️ {error[:1000]}"
             if installed:
-                output = f"📦 Yüklenen paketler: {', '.join(installed[:5])}{'...' if len(installed) > 5 else ''}\n\n{output}"
-            
-            return output[:4000]  # Telegram limiti
-            
+                output = f"📦 Yüklenen: {', '.join(installed[:5])}{'...' if len(installed) > 5 else ''}\n\n{output}"
+            return output[:4000]
         except Exception as e:
-            return f"❌ Çalıştırma hatası: {str(e)[:500]}"
+            return f"❌ Hata: {str(e)[:500]}"
 
-# ============ GLOBAL RUNNER ============
 runner = UltraFastPythonRunner()
 
 # ============ TELEGRAM HANDLERS ============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start komutu"""
     user = update.effective_user
     await update.message.reply_text(
         f"🤖 *ULTRA FAST Python Runner*\n\n"
         f"Merhaba {user.first_name}! 👋\n\n"
         f"⚡ **Özellikler:**\n"
-        f"• 🚫 Zaman aşımı YOK - Kodun ne kadar uzun çalışırsa çalışsın\n"
-        f"• 📦 Paralel paket yükleme - Tüm paketler aynı anda\n"
-        f"• 💾 Akıllı cache - Bir kere yükle, her anında çalıştır\n"
-        f"• 🔍 Otomatik import tespiti - Milisaniyede analiz\n"
-        f"• 🧹 Otomatik temizlik - Her çalışmadan sonra\n\n"
-        f"📤 **Hemen bir `.py` dosyası gönder, çalıştırayım!** 🚀",
+        f"• 🚫 Zaman aşımı YOK\n"
+        f"• 📦 Paralel paket yükleme\n"
+        f"• 💾 Akıllı cache\n"
+        f"• 🔍 Anlık import tespiti\n"
+        f"• 🧹 Otomatik temizlik\n\n"
+        f"📤 **.py dosyanı gönder, çalıştırayım!** 🚀",
         parse_mode='Markdown'
     )
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Süper hızlı dosya işleyici"""
-    
     doc = update.message.document
     user_id = update.effective_user.id
     
-    # Hızlı kontrol
+    if not doc.file_name.endswith('.py'):
+        await update.message.reply_text("❌ Sadece `.py` dosyası gönder!")
+        return
+    if doc.file_size > 10 * 1024 * 1024:
+        await update.message.reply_text("❌ Dosya >10MB olamaz!")
+        return
+    
+    status_msg = await update.message.reply_text("⚡ İşleniyor...")
+    temp_path = None
+    
+    try:
+        file = await context.bot.get_file(doc.file_id)
+        temp_path = f"/tmp/{user_id}_{doc.file_name}"
+        await file.download_to_drive(temp_path)
+        await status_msg.edit_text("🔍 Analiz ediliyor...")
+        output = await runner.run_ultra_fast(temp_path)
+        result = f"📁 *{doc.file_name}*\n\n📤 *Çıktı:*\n```\n{output}\n```"
+        if len(result) > 4096:
+            result = f"📁 *{doc.file_name}*\n\n📤 *Çıktı:*\n```\n{output[:3500]}\n```"
+        await status_msg.edit_text(result, parse_mode='Markdown')
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Hata: {str(e)[:200]}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass
+
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"🤖 *Bot Durumu*\n\n"
+        f"⚡ Mod: ULTRA FAST\n"
+        f"📦 Cache: {len(runner.package_cache)} paket\n"
+        f"🐍 Python: {sys.version.split()[0]}\n"
+        f"✅ Port: Açık (Render uyumlu)\n"
+        f"💡 .py dosyanı gönder!",
+        parse_mode='Markdown'
+    )
+
+# ============ MAIN ============
+def main():
+    if not TOKEN:
+        print("❌ BOT_TOKEN bulunamadı!")
+        return
+    try:
+        app = Application.builder().token(TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("status", status))
+        app.add_handler(MessageHandler(filters.Document.FileExtension("py"), handle_file))
+        print("🤖 ULTRA FAST Python Runner Bot başladı!")
+        print(f"✅ Port: {os.environ.get('PORT', 10000)} açık")
+        print(f"📦 Cache: {len(runner.package_cache)} paket")
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        print(f"❌ Hata: {e}")
+
+if __name__ == "__main__":
+    main() kontrol
     if not doc.file_name.endswith('.py'):
         await update.message.reply_text("❌ Sadece `.py` uzantılı dosyalar kabul edilir!")
         return
